@@ -1,0 +1,1608 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8"
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Game Dev Studio - GLB & Terrain Sandbox</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            user-select: none;
+            background-color: #111827;
+            color: #f3f4f6;
+        }
+
+        .mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #1f2937; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            height: 6px;
+            background: #374151;
+            border-radius: 3px;
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            transition: background .15s ease-in-out;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover {
+            background: #60a5fa;
+        }
+
+        .blender-panel {
+            background: rgba(24, 28, 36, 0.92);
+            backdrop-filter: blur(8px);
+            border: 1px solid #2d3748;
+        }
+
+        .tab-active {
+            background-color: #2563eb;
+            color: white;
+            border-bottom: 2px solid #60a5fa;
+        }
+    </style>
+
+    <!-- Import Map untuk Three.js & Addons -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body class="w-screen h-screen flex flex-col">
+
+    <!-- TOP NAVBAR / TOOLBAR -->
+    <header class="h-12 blender-panel flex items-center justify-between px-4 z-20 shrink-0 border-b border-gray-800">
+        <div class="flex items-center space-x-3">
+            <div class="flex items-center space-x-2 bg-orange-600/20 border border-orange-500/40 text-orange-400 px-2.5 py-1 rounded-md font-bold text-sm">
+                <i class="fa-solid fa-cube"></i>
+                <span>BlenderGLB Studio</span>
+            </div>
+
+            <!-- Mode Switcher -->
+            <div class="flex bg-gray-900 p-1 rounded-lg border border-gray-700">
+                <button id="btn-mode-edit" class="px-3 py-1 rounded-md text-xs font-semibold bg-blue-600 text-white transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-screwdriver-wrench"></i> Mode Pengembangan (Edit)
+                </button>
+                <button id="btn-mode-play" class="px-3 py-1 rounded-md text-xs font-semibold text-gray-400 hover:text-white transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-gamepad"></i> Mode Main (Play)
+                </button>
+            </div>
+
+            <!-- Gizmo Tools (Edit Mode) -->
+            <div id="gizmo-toolbar" class="flex items-center space-x-1 bg-gray-900 p-1 rounded-lg border border-gray-700">
+                <button data-mode="translate" class="gizmo-btn px-2.5 py-1 rounded text-xs bg-gray-700 text-blue-400 font-medium hover:bg-gray-600" title="Geser (Shortcut: G / W)">
+                    <i class="fa-solid fa-arrows-up-down-left-right"></i> Geser
+                </button>
+                <button data-mode="rotate" class="gizmo-btn px-2.5 py-1 rounded text-xs text-gray-400 hover:bg-gray-800" title="Putar (Shortcut: R / E)">
+                    <i class="fa-solid fa-rotate"></i> Putar
+                </button>
+                <button data-mode="scale" class="gizmo-btn px-2.5 py-1 rounded text-xs text-gray-400 hover:bg-gray-800" title="Skala (Shortcut: S)">
+                    <i class="fa-solid fa-expand"></i> Skala
+                </button>
+                <div class="h-4 w-[1px] bg-gray-700 mx-1"></div>
+                <button id="btn-place-mode" class="px-2.5 py-1 rounded text-xs text-emerald-400 hover:bg-gray-800 font-medium border border-transparent" title="Klik di Terrain untuk menaruh aset">
+                    <i class="fa-solid fa-map-pin"></i> Klik-Taruh: <span id="place-status">OFF</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Right Toolbar Actions -->
+        <div class="flex items-center space-x-2">
+            <button id="btn-blender-script" class="bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 border border-amber-500/40 px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5">
+                <i class="fa-brands fa-python"></i> Script Blender (Terrain & Char)
+            </button>
+            <button id="btn-export-scene" class="bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5">
+                <i class="fa-solid fa-download"></i> Simpan JSON Scene
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN WORKSPACE -->
+    <div class="flex-1 flex relative overflow-hidden">
+
+        <!-- LEFT SIDEBAR: ASSET MANAGER & HIERARCHY -->
+        <aside id="left-sidebar" class="w-72 blender-panel border-r border-gray-800 flex flex-col z-10 transition-all duration-200">
+            <!-- Upload Section -->
+            <div class="p-3 border-b border-gray-800">
+                <h2 class="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2 flex items-center justify-between">
+                    <span><i class="fa-solid fa-boxes-stacked mr-1 text-blue-400"></i> Import GLB / GLTF</span>
+                </h2>
+                
+                <div class="grid grid-cols-2 gap-2">
+                    <!-- Import Character GLB -->
+                    <label class="cursor-pointer bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 rounded-lg p-2 text-center transition flex flex-col items-center justify-center">
+                        <i class="fa-solid fa-user-astronaut text-blue-400 text-lg mb-1"></i>
+                        <span class="text-[11px] font-semibold text-blue-300">Ganti Karakter</span>
+                        <span class="text-[9px] text-gray-400">.glb / .gltf</span>
+                        <input type="file" id="upload-char-glb" accept=".glb,.gltf" class="hidden">
+                    </label>
+
+                    <!-- Import Prop/Asset GLB -->
+                    <label class="cursor-pointer bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 rounded-lg p-2 text-center transition flex flex-col items-center justify-center">
+                        <i class="fa-solid fa-tree-city text-emerald-400 text-lg mb-1"></i>
+                        <span class="text-[11px] font-semibold text-emerald-300">Tambah Aset</span>
+                        <span class="text-[9px] text-gray-400">.glb / .gltf</span>
+                        <input type="file" id="upload-asset-glb" accept=".glb,.gltf" multiple class="hidden">
+                    </label>
+                </div>
+                <p class="text-[10px] text-gray-400 mt-2 text-center">
+                    <i class="fa-solid fa-hand-pointer mr-1"></i> Bisa juga <b>Drag & Drop</b> file <code>.glb/.gltf</code> langsung ke layar 3D!
+                </p>
+            </div>
+
+            <!-- Built-in & Loaded Asset Library -->
+            <div class="p-3 border-b border-gray-800 flex-1 flex flex-col min-h-0">
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-gray-400">
+                        <i class="fa-solid fa-layer-group mr-1 text-emerald-400"></i> Library Aset (Klik utk Spawn)
+                    </h2>
+                </div>
+                <div id="asset-library" class="grid grid-cols-2 gap-2 overflow-y-auto pr-1">
+                    <!-- Preset Assets -->
+                    <button data-preset="tree" class="preset-spawn-btn bg-gray-800/80 hover:bg-gray-700 border border-gray-700 rounded-lg p-2 flex flex-col items-center text-xs transition">
+                        <i class="fa-solid fa-tree text-emerald-400 text-base mb-1"></i>
+                        <span>Pohon Pinus</span>
+                    </button>
+                    <button data-preset="rock" class="preset-spawn-btn bg-gray-800/80 hover:bg-gray-700 border border-gray-700 rounded-lg p-2 flex flex-col items-center text-xs transition">
+                        <i class="fa-solid fa-hill-rockslide text-gray-400 text-base mb-1"></i>
+                        <span>Batu Tebing</span>
+                    </button>
+                    <button data-preset="crate" class="preset-spawn-btn bg-gray-800/80 hover:bg-gray-700 border border-gray-700 rounded-lg p-2 flex flex-col items-center text-xs transition">
+                        <i class="fa-solid fa-box text-amber-500 text-base mb-1"></i>
+                        <span>Kotak Kayu</span>
+                    </button>
+                    <button data-preset="pillar" class="preset-spawn-btn bg-gray-800/80 hover:bg-gray-700 border border-gray-700 rounded-lg p-2 flex flex-col items-center text-xs transition">
+                        <i class="fa-solid fa-archway text-indigo-400 text-base mb-1"></i>
+                        <span>Pilar Reruntuhan</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Scene Outliner / Hierarchy -->
+            <div class="p-3 flex-1 flex flex-col min-h-0">
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-gray-400">
+                        <i class="fa-solid fa-sitemap mr-1 text-purple-400"></i> Daftar Objek (Outliner)
+                    </h2>
+                    <button id="btn-delete-selected" class="text-xs text-red-400 hover:text-red-300 px-1.5 py-0.5 rounded bg-red-900/20 border border-red-800/40 hidden" title="Hapus Objek (Del)">
+                        <i class="fa-solid fa-trash-can"></i> Hapus
+                    </button>
+                </div>
+                <div id="scene-hierarchy" class="flex-1 overflow-y-auto space-y-1 pr-1 text-xs">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- CENTER: 3D VIEWPORT CANVAS -->
+        <main class="flex-1 relative bg-gray-950 overflow-hidden" id="viewport-container">
+            <canvas id="game-canvas" class="w-full h-full block"></canvas>
+
+            <!-- Drag & Drop Overlay -->
+            <div id="drop-overlay" class="absolute inset-0 bg-blue-600/20 border-4 border-dashed border-blue-400 backdrop-blur-sm z-30 hidden flex-col items-center justify-center pointer-events-none">
+                <i class="fa-solid fa-cloud-arrow-up text-5xl text-blue-300 mb-3 animate-bounce"></i>
+                <h3 class="text-xl font-bold text-white">Lepaskan File .GLB / .GLTF di Sini</h3>
+                <p class="text-sm text-blue-200 mt-1">Otomatis mendeteksi apakah Anda ingin menjadikannya Karakter atau Aset Tempat</p>
+            </div>
+
+            <!-- HUD Info Overlay -->
+            <div class="absolute top-3 left-3 pointer-events-none flex flex-col gap-1.5">
+                <div class="bg-gray-900/80 backdrop-blur border border-gray-700/80 px-3 py-1.5 rounded-lg text-xs flex items-center gap-3">
+                    <span id="hud-mode-badge" class="text-blue-400 font-bold"><i class="fa-solid fa-compass-drafting mr-1"></i> DEV MODE</span>
+                    <span class="text-gray-400">|</span>
+                    <span id="hud-fps" class="mono text-emerald-400">60 FPS</span>
+                    <span class="text-gray-400">|</span>
+                    <span id="hud-pos" class="mono text-gray-300">Pos: 0.0, 0.0, 0.0</span>
+                </div>
+                <div id="hud-controls-hint" class="bg-gray-900/75 backdrop-blur border border-gray-800 px-3 py-2 rounded-lg text-[11px] text-gray-300 space-y-0.5 max-w-md">
+                    <div><b class="text-amber-400">Kontrol Karakter:</b> <kbd class="bg-gray-800 px-1 rounded">W,A,S,D</kbd> Jalan, <kbd class="bg-gray-800 px-1 rounded">Shift</kbd> Lari, <kbd class="bg-gray-800 px-1 rounded">Spasi</kbd> Lompat</div>
+                    <div><b class="text-blue-400">Editor 3D:</b> Klik Objek utk Pilih, <kbd class="bg-gray-800 px-1 rounded">G</kbd> Geser, <kbd class="bg-gray-800 px-1 rounded">R</kbd> Putar, <kbd class="bg-gray-800 px-1 rounded">S</kbd> Skala, <kbd class="bg-gray-800 px-1 rounded">Del</kbd> Hapus</div>
+                </div>
+            </div>
+
+            <!-- Toast Notification -->
+            <div id="toast-msg" class="absolute bottom-5 left-1/2 -translate-x-1/2 bg-gray-900/95 border border-blue-500/50 text-white px-4 py-2 rounded-full text-xs font-medium shadow-lg transition-all duration-300 opacity-0 translate-y-4 pointer-events-none z-40">
+                Notifikasi
+            </div>
+        </main>
+
+        <!-- RIGHT SIDEBAR: FLEXIBLE SETTINGS MENU (CHARACTER, TERRAIN, TRANSFORM) -->
+        <aside id="right-sidebar" class="w-80 blender-panel border-l border-gray-800 flex flex-col z-10">
+            <!-- Tabs Navigation -->
+            <div class="grid grid-cols-3 border-b border-gray-800 text-xs font-semibold bg-gray-900/60">
+                <button data-tab="tab-char" class="settings-tab tab-active py-2.5 text-center transition">
+                    <i class="fa-solid fa-person-running mr-1"></i> Karakter
+                </button>
+                <button data-tab="tab-terrain" class="settings-tab py-2.5 text-center text-gray-400 hover:text-white transition">
+                    <i class="fa-solid fa-mountain-sun mr-1"></i> Terrain
+                </button>
+                <button data-tab="tab-object" class="settings-tab py-2.5 text-center text-gray-400 hover:text-white transition">
+                    <i class="fa-solid fa-Sliders mr-1"></i> Objek
+                </button>
+            </div>
+
+            <!-- TAB 1: CHARACTER FLEXIBLE SETTINGS -->
+            <div id="tab-char" class="tab-content flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+                <div class="bg-blue-950/40 border border-blue-800/50 rounded-lg p-2.5 flex items-center justify-between">
+                    <div>
+                        <div class="font-bold text-blue-300">Model Karakter Aktif</div>
+                        <div id="active-char-name" class="text-[11px] text-gray-400 truncate w-44">Procedural Blender Rig</div>
+                    </div>
+                    <button id="btn-reset-char-pos" class="bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-1 rounded text-[11px] font-medium transition">
+                        Respawn
+                    </button>
+                </div>
+
+                <!-- Fisika & Pergerakan -->
+                <div class="space-y-2.5 border-b border-gray-800 pb-3">
+                    <h3 class="font-bold text-gray-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                        <i class="fa-solid fa-gauge-high text-blue-400"></i> Fisika & Pergerakan
+                    </h3>
+                    
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-gray-400">Kecepatan Jalan (Walk)</span>
+                            <span id="val-walk-speed" class="mono text-blue-400">6.0</span>
+                        </div>
+                        <input type="range" id="cfg-walk-speed" min="1" max="20" step="0.5" value="6" class="w-full">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-gray-400">Kecepatan Lari (Sprint)</span>
+                            <span id="val-run-speed" class="mono text-blue-400">12.0</span>
+                        </div>
+                        <input type="range" id="cfg-run-speed" min="2" max="35" step="0.5" value="12" class="w-full">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-gray-400">Kekuatan Lompat (Jump)</span>
+                            <span id="val-jump-force" class="mono text-blue-400">10.0</span>
+                        </div>
+                        <input type="range" id="cfg-jump-force" min="2" max="25" step="0.5" value="10" class="w-full">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-gray-400">Gravitasi Dunia</span>
+                            <span id="val-gravity" class="mono text-blue-400">25.0</span>
+                        </div>
+                        <input type="range" id="cfg-gravity" min="5" max="60" step="1" value="25" class="w-full">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-gray-400">Kecepatan Putar (Turn Smooth)</span>
+                            <span id="val-turn-speed" class="mono text-blue-400">10.0</span>
+                        </div>
+                        <input type="range" id="cfg-turn-speed" min="2" max="25" step="1" value="10" class="w-full">
+                    </div>
+                </div>
+
+                <!-- Transformasi & Penyesuaian GLB Karakter -->
+                <div class="space-y-2.5 border-b border-gray-800 pb-3">
+                    <h3 class="font-bold text-gray-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                        <i class="fa-solid fa-arrows-to-circle text-emerald-400"></i> Kalibrasi Mesh GLB/GLTF
+                    </h3>
+
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-gray-400">Skala Karakter (Scale)</span>
+                            <span id="val-char-scale" class="mono text-emerald-400">1.00x</span>
+                        </div>
+                        <input type="range" id="cfg-char-scale" min="0.05" max="5" step="0.05" value="1" class="w-full">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-gray-400">Offset Tinggi Kaki (Y-Offset)</span>
+                            <span id="val-char-yoffset" class="mono text-emerald-400">0.00</span>
+                        </div>
+                        <input type="range" id="cfg-char-yoffset" min="-3" max="3" step="0.05" value="0" class="w-full">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-gray-400">Koreksi Arah Hadap (Rotasi Y)</span>
+                            <span id="val-char-roty" class="mono text-emerald-400">0°</span>
+                        </div>
+                        <input type="range" id="cfg-char-roty" min="-180" max="180" step="15" value="0" class="w-full">
+                    </div>
+
+                    <!-- Animasi GLB -->
+                    <div class="pt-1">
+                        <label class="block text-gray-400 mb-1">Animasi Bawaan GLB (Jika Ada)</label>
+                        <select id="cfg-char-anim" class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs text-white outline-none">
+                            <option value="procedural">Procedural Walk/Idle (Otomatis)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Kamera Third-Person -->
+                <div class="space-y-2.5">
+                    <h3 class="font-bold text-gray-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                        <i class="fa-solid fa-video text-purple-400"></i> Pengaturan Kamera
+                    </h3>
+
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-gray-400">Jarak Kamera (Distance)</span>
+                            <span id="val-cam-dist" class="mono text-purple-400">8.0</span>
+                        </div>
+                        <input type="range" id="cfg-cam-dist" min="2" max="25" step="0.5" value="8" class="w-full">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-gray-400">Tinggi Kamera (Height)</span>
+                            <span id="val-cam-height" class="mono text-purple-400">3.5</span>
+                        </div>
+                        <input type="range" id="cfg-cam-height" min="1" max="15" step="0.5" value="3.5" class="w-full">
+                    </div>
+
+                    <div class="flex items-center justify-between pt-1">
+                        <span class="text-gray-400">Tampilkan Capsule Collider</span>
+                        <input type="checkbox" id="cfg-show-collider" class="w-4 h-4 accent-blue-600 rounded">
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: TERRAIN & ENVIRONMENT SETTINGS -->
+            <div id="tab-terrain" class="tab-content hidden flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+                <div class="space-y-2.5 border-b border-gray-800 pb-3">
+                    <h3 class="font-bold text-gray-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                        <i class="fa-solid fa-mountain text-emerald-400"></i> Generator Terrain Blender
+                    </h3>
+
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-gray-400">Tinggi Bukit (Amplitude)</span>
+                            <span id="val-terr-height" class="mono text-emerald-400">4.0</span>
+                        </div>
+                        <input type="range" id="cfg-terr-height" min="0" max="15" step="0.5" value="4" class="w-full">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-gray-400">Frekuensi Gelombang (Scale)</span>
+                            <span id="val-terr-freq" class="mono text-emerald-400">0.04</span>
+                        </div>
+                        <input type="range" id="cfg-terr-freq" min="0.01" max="0.15" step="0.005" value="0.04" class="w-full">
+                    </div>
+
+                    <div class="flex items-center justify-between pt-1">
+                        <span class="text-gray-400">Tampilkan Grid Blender</span>
+                        <input type="checkbox" id="cfg-show-grid" checked class="w-4 h-4 accent-emerald-600 rounded">
+                    </div>
+
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-400">Mode Wireframe Terrain</span>
+                        <input type="checkbox" id="cfg-terr-wireframe" class="w-4 h-4 accent-emerald-600 rounded">
+                    </div>
+
+                    <button id="btn-scatter-nature" class="w-full mt-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 py-2 rounded-lg font-semibold transition">
+                        <i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Sebar Pohon & Batu Otomatis
+                    </button>
+                </div>
+
+                <!-- Pencahayaan -->
+                <div class="space-y-2.5">
+                    <h3 class="font-bold text-gray-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                        <i class="fa-solid fa-sun text-amber-400"></i> Pencahayaan & Langit
+                    </h3>
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-gray-400">Sudut Matahari (Waktu)</span>
+                            <span id="val-sun-angle" class="mono text-amber-400">45°</span>
+                        </div>
+                        <input type="range" id="cfg-sun-angle" min="5" max="175" step="1" value="45" class="w-full">
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 3: SELECTED OBJECT INSPECTOR -->
+            <div id="tab-object" class="tab-content hidden flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+                <div id="no-obj-selected" class="text-center py-8 text-gray-500">
+                    <i class="fa-solid fa-arrow-pointer text-2xl mb-2 block"></i>
+                    Klik salah satu aset di layar 3D atau di daftar Outliner untuk mengatur posisinya.
+                </div>
+
+                <div id="obj-inspector" class="space-y-3 hidden">
+                    <div class="bg-gray-800 p-2.5 rounded-lg border border-gray-700">
+                        <div class="text-[10px] text-gray-400 uppercase">Nama Objek Terpilih</div>
+                        <div id="insp-name" class="font-bold text-white text-sm truncate">Object</div>
+                    </div>
+
+                    <!-- Position -->
+                    <div class="space-y-1.5">
+                        <label class="font-semibold text-gray-300">Posisi (Location)</label>
+                        <div class="grid grid-cols-3 gap-1.5">
+                            <div class="bg-gray-900 border border-gray-700 rounded p-1 flex items-center">
+                                <span class="text-red-400 font-bold px-1">X</span>
+                                <input type="number" id="insp-pos-x" step="0.5" class="w-full bg-transparent text-right mono outline-none">
+                            </div>
+                            <div class="bg-gray-900 border border-gray-700 rounded p-1 flex items-center">
+                                <span class="text-green-400 font-bold px-1">Y</span>
+                                <input type="number" id="insp-pos-y" step="0.5" class="w-full bg-transparent text-right mono outline-none">
+                            </div>
+                            <div class="bg-gray-900 border border-gray-700 rounded p-1 flex items-center">
+                                <span class="text-blue-400 font-bold px-1">Z</span>
+                                <input type="number" id="insp-pos-z" step="0.5" class="w-full bg-transparent text-right mono outline-none">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Rotation -->
+                    <div class="space-y-1.5">
+                        <label class="font-semibold text-gray-300">Rotasi (Derajat)</label>
+                        <div class="grid grid-cols-3 gap-1.5">
+                            <div class="bg-gray-900 border border-gray-700 rounded p-1 flex items-center">
+                                <span class="text-red-400 font-bold px-1">X</span>
+                                <input type="number" id="insp-rot-x" step="5" class="w-full bg-transparent text-right mono outline-none">
+                            </div>
+                            <div class="bg-gray-900 border border-gray-700 rounded p-1 flex items-center">
+                                <span class="text-green-400 font-bold px-1">Y</span>
+                                <input type="number" id="insp-rot-y" step="5" class="w-full bg-transparent text-right mono outline-none">
+                            </div>
+                            <div class="bg-gray-900 border border-gray-700 rounded p-1 flex items-center">
+                                <span class="text-blue-400 font-bold px-1">Z</span>
+                                <input type="number" id="insp-rot-z" step="5" class="w-full bg-transparent text-right mono outline-none">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Scale -->
+                    <div class="space-y-1.5">
+                        <label class="font-semibold text-gray-300">Skala (Scale Uniform)</label>
+                        <input type="range" id="insp-scale-uni" min="0.1" max="10" step="0.1" value="1" class="w-full">
+                    </div>
+
+                    <div class="pt-2 flex gap-2">
+                        <button id="btn-snap-ground" class="flex-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/40 py-1.5 rounded font-medium transition">
+                            <i class="fa-solid fa-arrow-down-to-line mr-1"></i> Tempel ke Tanah
+                        </button>
+                        <button id="btn-clone-obj" class="flex-1 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/40 py-1.5 rounded font-medium transition">
+                            <i class="fa-solid fa-clone mr-1"></i> Duplikat
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- MODAL: BLENDER PYTHON GENERATOR SCRIPT -->
+    <div id="blender-modal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-700 rounded-xl max-w-2xl w-full flex flex-col max-h-[85vh] shadow-2xl">
+            <div class="flex items-center justify-between px-5 py-3.5 border-b border-gray-800">
+                <div class="flex items-center gap-2">
+                    <i class="fa-brands fa-python text-amber-400 text-lg"></i>
+                    <h3 class="font-bold text-sm text-white">Script Python Blender: Buat Terrain & Karakter (.GLB)</h3>
+                </div>
+                <button id="btn-close-modal" class="text-gray-400 hover:text-white">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <div class="p-5 overflow-y-auto space-y-3 text-xs text-gray-300">
+                <p>Buka aplikasi <b>Blender</b>, masuk ke tab <b>Scripting</b>, klik <b>New</b>, tempelkan kode di bawah ini lalu klik <b>Run Script</b>. Script ini akan otomatis membuat <b>Terrain Berbukit</b> dan <b>Karakter Robot/Lowpoly beserta Armature</b> siap di-export ke <code>.glb</code>!</p>
+                <div class="relative">
+                    <pre id="blender-code" class="bg-gray-950 border border-gray-800 p-3.5 rounded-lg mono text-[11px] text-emerald-300 overflow-x-auto leading-relaxed">import bpy
+import math
+
+# 1. Bersihkan Scene Awal
+bpy.ops.object.select_all(action='SELECT')
+bpy.ops.object.delete(use_global=False)
+
+# 2. Buat Terrain (Grid + Displace Procedural)
+bpy.ops.mesh.primitive_grid_add(x_subdivisions=64, y_subdivisions=64, size=60, location=(0, 0, 0))
+terrain = bpy.context.active_object
+terrain.name = "Game_Terrain"
+
+# Tambahkan Material Hijau Terrain
+mat_terr = bpy.data.materials.new(name="Terrain_Mat")
+mat_terr.use_nodes = True
+mat_terr.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = (0.12, 0.38, 0.18, 1)
+terrain.data.materials.append(mat_terr)
+
+# Buat Gelombang Bukit
+for v in terrain.data.vertices:
+    v.co.z = math.sin(v.co.x * 0.15) * math.cos(v.co.y * 0.15) * 2.5
+
+# Shade Smooth Terrain
+bpy.ops.object.shade_smooth()
+
+# 3. Buat Karakter Game (Capsule / Robot Stylized)
+bpy.ops.mesh.primitive_uv_sphere_add(radius=0.6, location=(0, 0, 1.2))
+char_body = bpy.context.active_object
+char_body.name = "Player_Character"
+
+# Buat Kepala / Visor
+bpy.ops.mesh.primitive_cube_add(size=0.5, location=(0, 0.35, 1.5))
+visor = bpy.context.active_object
+visor.scale = (0.8, 0.4, 0.3)
+
+# Gabungkan Kepala ke Badan Karakter
+bpy.ops.object.select_all(action='DESELECT')
+visor.select_set(True)
+char_body.select_set(True)
+bpy.context.view_layer.objects.active = char_body
+bpy.ops.object.join()
+
+# Material Karakter Biru Menyala
+mat_char = bpy.data.materials.new(name="Character_Mat")
+mat_char.use_nodes = True
+mat_char.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = (0.15, 0.55, 0.95, 1)
+char_body.data.materials.append(mat_char)
+
+print("Terrain & Karakter berhasil dibuat! Silakan File -> Export -> glTF 2.0 (.glb)")</pre>
+                    <button id="btn-copy-script" class="absolute top-2.5 right-2.5 bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded text-xs font-medium transition">
+                        <i class="fa-regular fa-copy mr-1"></i> Salin Script
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN APPLICATION LOGIC -->
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { TransformControls } from 'three/addons/controls/TransformControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        // --- STATE PENGEMBANGAN & KONFIGURASI KARAKTER ---
+        const gameState = {
+            mode: 'edit', // 'edit' atau 'play'
+            placeMode: false,
+            activePreset: 'tree',
+            customAssetTemplates: [], // Menyimpan GLB yang diupload sebagai aset
+            placedObjects: [],
+            selectedObject: null,
+            charConfig: {
+                walkSpeed: 6.0,
+                runSpeed: 12.0,
+                jumpForce: 10.0,
+                gravity: 25.0,
+                turnSpeed: 10.0,
+                scale: 1.0,
+                yOffset: 0.0,
+                rotYOffset: 0,
+                camDist: 8.0,
+                camHeight: 3.5
+            },
+            terrainConfig: {
+                amplitude: 4.0,
+                frequency: 0.04
+            }
+        };
+
+        // --- INISIALISASI SCENE, CAMERA, RENDERER ---
+        const canvas = document.getElementById('game-canvas');
+        const viewport = document.getElementById('viewport-container');
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0f172a);
+        scene.fog = new THREE.FogExp2(0x0f172a, 0.008);
+
+        const camera = new THREE.PerspectiveCamera(60, viewport.clientWidth / viewport.clientHeight, 0.1, 500);
+        camera.position.set(12, 10, 15);
+
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+        renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        // --- PENCAHAYAAN ---
+        const ambientLight = new THREE.HemisphereLight(0xdbeafe, 0x1e293b, 0.8);
+        scene.add(ambientLight);
+
+        const sunLight = new THREE.DirectionalLight(0xfffbeb, 1.8);
+        sunLight.position.set(30, 45, 25);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
+        sunLight.shadow.camera.near = 0.5;
+        sunLight.shadow.camera.far = 150;
+        const d = 45;
+        sunLight.shadow.camera.left = -d;
+        sunLight.shadow.camera.right = d;
+        sunLight.shadow.camera.top = d;
+        sunLight.shadow.camera.bottom = -d;
+        scene.add(sunLight);
+
+        // Grid Blender
+        const gridHelper = new THREE.GridHelper(120, 60, 0x3b82f6, 0x334155);
+        gridHelper.position.y = 0.02;
+        scene.add(gridHelper);
+
+        // --- KONTROL EDITOR (ORBIT & TRANSFORM GIZMO) ---
+        const orbitControls = new OrbitControls(camera, renderer.domElement);
+        orbitControls.enableDamping = true;
+        orbitControls.dampingFactor = 0.07;
+        orbitControls.maxPolarAngle = Math.PI / 2 - 0.02;
+
+        const transformControls = new TransformControls(camera, renderer.domElement);
+        transformControls.addEventListener('dragging-changed', (event) => {
+            orbitControls.enabled = !event.value;
+        });
+        transformControls.addEventListener('change', () => {
+            if (gameState.selectedObject) updateInspectorUI(gameState.selectedObject);
+        });
+        scene.add(transformControls);
+
+        // --- PEMBUATAN TERRAIN 3D PROCEDURAL ---
+        const terrainSize = 120;
+        const terrainSegments = 96;
+        const terrainGeo = new THREE.PlaneGeometry(terrainSize, terrainSize, terrainSegments, terrainSegments);
+        terrainGeo.rotateX(-Math.PI / 2);
+
+        // Fungsi Matematika Ketinggian Terrain
+        function getProceduralHeight(x, z) {
+            const amp = gameState.terrainConfig.amplitude;
+            const freq = gameState.terrainConfig.frequency;
+            // Buat area tengah (spawn) agak rata
+            const distFromCenter = Math.sqrt(x * x + z * z);
+            const flattenFactor = Math.min(1.0, Math.max(0.0, (distFromCenter - 5) / 10));
+            const h = (Math.sin(x * freq) * Math.cos(z * freq) + Math.sin((x + z) * freq * 0.5) * 0.5) * amp;
+            return h * flattenFactor;
+        }
+
+        // Vertex Colors untuk Terrain (Rumput, Tanah, Puncak Batu)
+        const terrainMat = new THREE.MeshStandardMaterial({
+            vertexColors: true,
+            roughness: 0.85,
+            metalness: 0.05,
+            flatShading: true
+        });
+
+        const terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);
+        terrainMesh.receiveShadow = true;
+        terrainMesh.name = "Blender_Terrain";
+        scene.add(terrainMesh);
+
+        function updateTerrainGeometry() {
+            const posAttr = terrainGeo.attributes.position;
+            const colors = [];
+            const colorLow = new THREE.Color(0x15803d);   // Hijau Lembah
+            const colorMid = new THREE.Color(0x4d7c0f);   // Hijau Bukit
+            const colorHigh = new THREE.Color(0x57534e);  // Abu Batu
+
+            for (let i = 0; i < posAttr.count; i++) {
+                const x = posAttr.getX(i);
+                const z = posAttr.getZ(i);
+                const y = getProceduralHeight(x, z);
+                posAttr.setY(i, y);
+
+                const c = new THREE.Color();
+                if (y < 1.2) {
+                    c.lerpColors(colorLow, colorMid, (y + 3) / 4.2);
+                } else {
+                    c.lerpColors(colorMid, colorHigh, Math.min(1, (y - 1.2) / 5));
+                }
+                colors.push(c.r, c.g, c.b);
+            }
+
+            terrainGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            posAttr.needsUpdate = true;
+            terrainGeo.computeVertexNormals();
+
+            // Sesuaikan ulang tinggi objek yang ditempel di tanah
+            gameState.placedObjects.forEach(obj => {
+                if (obj.userData.snapToGround) {
+                    obj.position.y = getTerrainHeightAt(obj.position.x, obj.position.z);
+                }
+            });
+        }
+
+        const raycaster = new THREE.Raycaster();
+        const downVector = new THREE.Vector3(0, -1, 0);
+
+        function getTerrainHeightAt(x, z) {
+            raycaster.set(new THREE.Vector3(x, 100, z), downVector);
+            const hits = raycaster.intersectObject(terrainMesh, false);
+            if (hits.length > 0) return hits[0].point.y;
+            return getProceduralHeight(x, z);
+        }
+
+        updateTerrainGeometry();
+
+        // --- PEMBUATAN KARAKTER UTAMA (DEFAULT + GLB LOADER) ---
+        const playerController = new THREE.Group();
+        playerController.position.set(0, 2, 0);
+        scene.add(playerController);
+
+        const characterVisualRoot = new THREE.Group();
+        playerController.add(characterVisualRoot);
+
+        // Collider Visual Debug
+        const colliderGeo = new THREE.CapsuleGeometry(0.45, 1.0, 4, 16);
+        const colliderMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, wireframe: true, visible: false });
+        const colliderHelper = new THREE.Mesh(colliderGeo, colliderMat);
+        colliderHelper.position.y = 0.95;
+        playerController.add(colliderHelper);
+
+        let characterMixer = null;
+        let characterAnimations = [];
+        let activeAction = null;
+        let isCustomGLBChar = false;
+        let defaultLimbs = {};
+
+        // Buat Karakter Default (Bergaya Blender Robot/Adventurer + Geometri Spesial Anda)
+        function createDefaultCharacter() {
+            while (characterVisualRoot.children.length > 0) {
+                characterVisualRoot.remove(characterVisualRoot.children[0]);
+            }
+            isCustomGLBChar = false;
+
+            const group = new THREE.Group();
+
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.3, metalness: 0.3 });
+            const darkMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.6 });
+            const visorMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7, emissiveIntensity: 0.6 });
+            const packMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.4 });
+
+            // Torso
+            const torso = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.75, 0.4), bodyMat);
+            torso.position.y = 1.1;
+            torso.castShadow = true;
+            group.add(torso);
+
+            // Backpack
+            const pack = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.55, 0.25), packMat);
+            pack.position.set(0, 1.15, -0.28);
+            pack.castShadow = true;
+            group.add(pack);
+
+            // Head
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.45, 0.48), bodyMat);
+            head.position.y = 1.78;
+            head.castShadow = true;
+            group.add(head);
+
+            // Glowing Visor (Menghadap +Z)
+            const visor = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.16, 0.1), visorMat);
+            visor.position.set(0, 1.8, 0.22);
+            group.add(visor);
+
+            // Limbs untuk animasi procedural
+            const legGeo = new THREE.BoxGeometry(0.22, 0.65, 0.24);
+            const leftLeg = new THREE.Mesh(legGeo, darkMat);
+            leftLeg.position.set(-0.18, 0.35, 0);
+            leftLeg.castShadow = true;
+
+            const rightLeg = new THREE.Mesh(legGeo, darkMat);
+            rightLeg.position.set(0.18, 0.35, 0);
+            rightLeg.castShadow = true;
+
+            const armGeo = new THREE.BoxGeometry(0.18, 0.6, 0.2);
+            const leftArm = new THREE.Mesh(armGeo, darkMat);
+            leftArm.position.set(-0.45, 1.1, 0);
+            leftArm.castShadow = true;
+
+            const rightArm = new THREE.Mesh(armGeo, darkMat);
+            rightArm.position.set(0.45, 1.1, 0);
+            rightArm.castShadow = true;
+
+            group.add(leftLeg, rightLeg, leftArm, rightArm);
+            defaultLimbs = { leftLeg, rightLeg, leftArm, rightArm, head };
+
+            characterVisualRoot.add(group);
+            applyCharacterCalibration();
+        }
+
+        createDefaultCharacter();
+
+        // Kalibrasi Skala, Offset & Rotasi Karakter
+        function applyCharacterCalibration() {
+            const s = gameState.charConfig.scale;
+            characterVisualRoot.scale.set(s, s, s);
+            characterVisualRoot.position.y = gameState.charConfig.yOffset;
+            characterVisualRoot.rotation.y = THREE.MathUtils.degToRad(gameState.charConfig.rotYOffset);
+        }
+
+        // --- GLTF / GLB LOADER (UNTUK KARAKTER MAUPUN ASET TEMPAT) ---
+        const gltfLoader = new GLTFLoader();
+
+        function loadCharacterFromGLB(fileOrUrl, fileName = "Custom_GLB_Character") {
+            showToast(`Memuat Karakter: ${fileName}...`);
+            const url = typeof fileOrUrl === 'string' ? fileOrUrl : URL.createObjectURL(fileOrUrl);
+
+            gltfLoader.load(url, (gltf) => {
+                while (characterVisualRoot.children.length > 0) {
+                    characterVisualRoot.remove(characterVisualRoot.children[0]);
+                }
+
+                const model = gltf.scene;
+                model.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                        if (!child.material) {
+                            child.material = new THREE.MeshStandardMaterial({ color: 0x60a5fa });
+                        }
+                    }
+                });
+
+                // Auto-normalize & Center Bounding Box agar kaki pas di tanah
+                const box = new THREE.Box3().setFromObject(model);
+                const size = box.getSize(new THREE.Vector3());
+                const center = box.getCenter(new THREE.Vector3());
+
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const normScale = maxDim > 0 ? (2.0 / maxDim) : 1.0;
+                model.scale.setScalar(normScale);
+
+                // Hitung ulang box setelah normalisasi
+                const newBox = new THREE.Box3().setFromObject(model);
+                const newCenter = newBox.getCenter(new THREE.Vector3());
+                model.position.x -= newCenter.x;
+                model.position.z -= newCenter.z;
+                model.position.y -= newBox.min.y; // Kaki menyentuh Y=0
+
+                characterVisualRoot.add(model);
+                isCustomGLBChar = true;
+                document.getElementById('active-char-name').textContent = fileName;
+
+                // Cek Animasi Bawaan GLB
+                const animSelect = document.getElementById('cfg-char-anim');
+                animSelect.innerHTML = `<option value="procedural">Procedural Bounce/Walk</option>`;
+                
+                if (characterMixer) characterMixer.stopAllAction();
+                characterAnimations = gltf.animations || [];
+
+                if (characterAnimations.length > 0) {
+                    characterMixer = new THREE.AnimationMixer(model);
+                    characterAnimations.forEach((clip, idx) => {
+                        const opt = document.createElement('option');
+                        opt.value = idx;
+                        opt.textContent = `Anim ${idx + 1}: ${clip.name || 'Clip'}`;
+                        animSelect.appendChild(opt);
+                    });
+                    animSelect.value = "0";
+                    playGLBAnimation(0);
+                } else {
+                    characterMixer = null;
+                }
+
+                applyCharacterCalibration();
+                showToast(`Karakter "${fileName}" berhasil dipasang!`);
+            }, undefined, (err) => {
+                console.error(err);
+                showToast("Gagal memuat file GLB/GLTF!", true);
+            });
+        }
+
+        function playGLBAnimation(index) {
+            if (!characterMixer || !characterAnimations[index]) return;
+            characterMixer.stopAllAction();
+            activeAction = characterMixer.clipAction(characterAnimations[index]);
+            activeAction.play();
+        }
+
+        // --- SISTEM PEMBUATAN & PENEMPATAN ASET (PROPS) ---
+        function createPresetMesh(type) {
+            const group = new THREE.Group();
+            if (type === 'tree') {
+                const trunk = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.2, 0.3, 1.6, 7),
+                    new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.9 })
+                );
+                trunk.position.y = 0.8;
+                trunk.castShadow = true;
+
+                const leavesMat = new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.8, flatShading: true });
+                const c1 = new THREE.Mesh(new THREE.ConeGeometry(1.4, 2.2, 7), leavesMat);
+                c1.position.y = 2.3;
+                c1.castShadow = true;
+
+                const c2 = new THREE.Mesh(new THREE.ConeGeometry(1.0, 1.8, 7), leavesMat);
+                c2.position.y = 3.5;
+                c2.castShadow = true;
+
+                group.add(trunk, c1, c2);
+                group.name = "Pohon_Pinus";
+            } else if (type === 'rock') {
+                const rock = new THREE.Mesh(
+                    new THREE.DodecahedronGeometry(1.1, 1),
+                    new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.85, flatShading: true })
+                );
+                rock.scale.set(1.2, 0.8, 1.0);
+                rock.position.y = 0.6;
+                rock.castShadow = true;
+                rock.receiveShadow = true;
+                group.add(rock);
+                group.name = "Batu_Tebing";
+            } else if (type === 'crate') {
+                const crate = new THREE.Mesh(
+                    new THREE.BoxGeometry(1.2, 1.2, 1.2),
+                    new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.7 })
+                );
+                crate.position.y = 0.6;
+                crate.castShadow = true;
+                crate.receiveShadow = true;
+                group.add(crate);
+                group.name = "Kotak_Kayu";
+            } else if (type === 'pillar') {
+                const pillar = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.45, 0.55, 3.8, 8),
+                    new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.6 })
+                );
+                pillar.position.y = 1.9;
+                pillar.castShadow = true;
+                pillar.receiveShadow = true;
+                group.add(pillar);
+                group.name = "Pilar_Kuno";
+            }
+            return group;
+        }
+
+        function spawnAssetAt(typeOrTemplate, x, z, selectAfter = true) {
+            let obj;
+            if (typeof typeOrTemplate === 'string') {
+                obj = createPresetMesh(typeOrTemplate);
+            } else {
+                obj = typeOrTemplate.scene.clone(true);
+                obj.name = typeOrTemplate.name;
+            }
+
+            const y = getTerrainHeightAt(x, z);
+            obj.position.set(x, y, z);
+            obj.userData.isGameAsset = true;
+            obj.userData.snapToGround = true;
+            obj.userData.id = THREE.MathUtils.generateUUID().slice(0, 6);
+
+            scene.add(obj);
+            gameState.placedObjects.push(obj);
+            refreshOutlinerUI();
+
+            if (selectAfter && gameState.mode === 'edit') {
+                selectObject(obj);
+            }
+            return obj;
+        }
+
+        // Sebar Pohon & Batu Awal
+        function scatterInitialEnvironment() {
+            const types = ['tree', 'tree', 'rock', 'pillar'];
+            for (let i = 0; i < 18; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const radius = 10 + Math.random() * 40;
+                const x = Math.cos(angle) * radius;
+                const z = Math.sin(angle) * radius;
+                const t = types[Math.floor(Math.random() * types.length)];
+                const obj = spawnAssetAt(t, x, z, false);
+                const s = 0.8 + Math.random() * 0.6;
+                obj.scale.set(s, s, s);
+                obj.rotation.y = Math.random() * Math.PI * 2;
+            }
+        }
+        scatterInitialEnvironment();
+
+        // --- MANAJEMEN SELEKSI & OUTLINER ---
+        function selectObject(obj) {
+            gameState.selectedObject = obj;
+            const delBtn = document.getElementById('btn-delete-selected');
+            const noInsp = document.getElementById('no-obj-selected');
+            const insp = document.getElementById('obj-inspector');
+
+            if (obj && gameState.mode === 'edit') {
+                transformControls.attach(obj);
+                delBtn.classList.remove('hidden');
+                noInsp.classList.add('hidden');
+                insp.classList.remove('hidden');
+                updateInspectorUI(obj);
+            } else {
+                transformControls.detach();
+                delBtn.classList.add('hidden');
+                noInsp.classList.remove('hidden');
+                insp.classList.add('hidden');
+            }
+            refreshOutlinerUI();
+        }
+
+        function refreshOutlinerUI() {
+            const container = document.getElementById('scene-hierarchy');
+            container.innerHTML = '';
+
+            gameState.placedObjects.forEach((obj, index) => {
+                const isSel = gameState.selectedObject === obj;
+                const item = document.createElement('div');
+                item.className = `flex items-center justify-between px-2.5 py-1.5 rounded cursor-pointer transition ${
+                    isSel ? 'bg-blue-600 text-white font-semibold' : 'bg-gray-800/60 hover:bg-gray-800 text-gray-300'
+                }`;
+                item.innerHTML = `
+                    <div class="flex items-center gap-2 truncate">
+                        <i class="fa-solid fa-cube text-[10px] ${isSel ? 'text-white' : 'text-blue-400'}"></i>
+                        <span class="truncate">${index + 1}. ${obj.name}</span>
+                    </div>
+                    <span class="text-[10px] mono opacity-75">(${obj.position.x.toFixed(0)}, ${obj.position.z.toFixed(0)})</span>
+                `;
+                item.addEventListener('click', () => {
+                    selectObject(obj);
+                    switchTab('tab-object');
+                });
+                container.appendChild(item);
+            });
+        }
+
+        function updateInspectorUI(obj) {
+            document.getElementById('insp-name').textContent = `${obj.name} [#${obj.userData.id}]`;
+            document.getElementById('insp-pos-x').value = obj.position.x.toFixed(2);
+            document.getElementById('insp-pos-y').value = obj.position.y.toFixed(2);
+            document.getElementById('insp-pos-z').value = obj.position.z.toFixed(2);
+
+            document.getElementById('insp-rot-x').value = THREE.MathUtils.radToDeg(obj.rotation.x).toFixed(0);
+            document.getElementById('insp-rot-y').value = THREE.MathUtils.radToDeg(obj.rotation.y).toFixed(0);
+            document.getElementById('insp-rot-z').value = THREE.MathUtils.radToDeg(obj.rotation.z).toFixed(0);
+
+            document.getElementById('insp-scale-uni').value = obj.scale.x;
+        }
+
+        // --- INTERAKSI KLIK VIEWPORT (RAYCAST SELECT & PLACE) ---
+        const mouse = new THREE.Vector2();
+        let pointerDownPos = new THREE.Vector2();
+
+        canvas.addEventListener('pointerdown', (e) => {
+            pointerDownPos.set(e.clientX, e.clientY);
+        });
+
+        canvas.addEventListener('pointerup', (e) => {
+            if (gameState.mode !== 'edit') return;
+            if (pointerDownPos.distanceTo(new THREE.Vector2(e.clientX, e.clientY)) > 5) return; // Dragging camera
+
+            const rect = canvas.getBoundingClientRect();
+            mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+
+            // Jika Mode Klik-Taruh Aktif
+            if (gameState.placeMode) {
+                const hits = raycaster.intersectObject(terrainMesh, false);
+                if (hits.length > 0) {
+                    const pt = hits[0].point;
+                    spawnAssetAt(gameState.activePreset, pt.x, pt.z, true);
+                    showToast(`Menaruh aset di (${pt.x.toFixed(1)}, ${pt.z.toFixed(1)})`);
+                }
+                return;
+            }
+
+            // Cek Klik pada Objek Aset
+            const hits = raycaster.intersectObjects(gameState.placedObjects, true);
+            if (hits.length > 0) {
+                let rootObj = hits[0].object;
+                while (rootObj.parent && !rootObj.userData.isGameAsset) {
+                    rootObj = rootObj.parent;
+                }
+                if (rootObj.userData.isGameAsset) {
+                    selectObject(rootObj);
+                }
+            } else {
+                selectObject(null);
+            }
+        });
+
+        // --- KONTROL KEYBOARD KARAKTER & SHORTCUT EDITOR ---
+        const keys = { w: false, a: false, s: false, d: false, shift: false, space: false };
+        const playerVelocity = new THREE.Vector3();
+        let isGrounded = false;
+        let walkCycleTime = 0;
+
+        window.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT') return;
+            const k = e.key.toLowerCase();
+
+            if (k === 'w' || k === 'arrowup') keys.w = true;
+            if (k === 'a' || k === 'arrowleft') keys.a = true;
+            if (k === 's' || k === 'arrowdown') keys.s = true;
+            if (k === 'd' || k === 'arrowright') keys.d = true;
+            if (k === 'shift') keys.shift = true;
+            if (k === ' ') keys.space = true;
+
+            // Shortcut Gizmo Blender di Edit Mode
+            if (gameState.mode === 'edit' && gameState.selectedObject) {
+                if (k === 'g') setGizmoMode('translate');
+                if (k === 'r') setGizmoMode('rotate');
+                if (k === 's' && !keys.w && !keys.a && !keys.d) setGizmoMode('scale');
+                if (e.key === 'Delete' || e.key === 'Backspace') deleteSelectedObject();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            const k = e.key.toLowerCase();
+            if (k === 'w' || k === 'arrowup') keys.w = false;
+            if (k === 'a' || k === 'arrowleft') keys.a = false;
+            if (k === 's' || k === 'arrowdown') keys.s = false;
+            if (k === 'd' || k === 'arrowright') keys.d = false;
+            if (k === 'shift') keys.shift = false;
+            if (k === ' ') keys.space = false;
+        });
+
+        // --- EVENT LISTENERS UI & MENU FLEKSIBEL ---
+        // Tabs
+        function switchTab(tabId) {
+            document.querySelectorAll('.settings-tab').forEach(btn => {
+                const active = btn.dataset.tab === tabId;
+                btn.classList.toggle('tab-active', active);
+                btn.classList.toggle('text-gray-400', !active);
+            });
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.toggle('hidden', content.id !== tabId);
+            });
+        }
+
+        document.querySelectorAll('.settings-tab').forEach(btn => {
+            btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+        });
+
+        // Mode Edit vs Play
+        const btnEdit = document.getElementById('btn-mode-edit');
+        const btnPlay = document.getElementById('btn-mode-play');
+        const gizmoToolbar = document.getElementById('gizmo-toolbar');
+        const hudBadge = document.getElementById('hud-mode-badge');
+
+        function setGameMode(mode) {
+            gameState.mode = mode;
+            if (mode === 'play') {
+                btnPlay.className = "px-3 py-1 rounded-md text-xs font-semibold bg-emerald-600 text-white transition flex items-center gap-1.5";
+                btnEdit.className = "px-3 py-1 rounded-md text-xs font-semibold text-gray-400 hover:text-white transition flex items-center gap-1.5";
+                gizmoToolbar.classList.add('opacity-30', 'pointer-events-none');
+                selectObject(null);
+                hudBadge.innerHTML = `<i class="fa-solid fa-gamepad mr-1"></i> PLAY MODE`;
+                hudBadge.className = "text-emerald-400 font-bold";
+                showToast("Mode Main Aktif! Gunakan WASD & Spasi untuk menggerakkan karakter.");
+            } else {
+                btnEdit.className = "px-3 py-1 rounded-md text-xs font-semibold bg-blue-600 text-white transition flex items-center gap-1.5";
+                btnPlay.className = "px-3 py-1 rounded-md text-xs font-semibold text-gray-400 hover:text-white transition flex items-center gap-1.5";
+                gizmoToolbar.classList.remove('opacity-30', 'pointer-events-none');
+                hudBadge.innerHTML = `<i class="fa-solid fa-compass-drafting mr-1"></i> DEV MODE`;
+                hudBadge.className = "text-blue-400 font-bold";
+                showToast("Mode Pengembangan Aktif!");
+            }
+        }
+
+        btnEdit.addEventListener('click', () => setGameMode('edit'));
+        btnPlay.addEventListener('click', () => setGameMode('play'));
+
+        // Gizmo Mode Buttons
+        function setGizmoMode(mode) {
+            transformControls.setMode(mode);
+            document.querySelectorAll('.gizmo-btn').forEach(b => {
+                const active = b.dataset.mode === mode;
+                b.className = active
+                    ? "gizmo-btn px-2.5 py-1 rounded text-xs bg-gray-700 text-blue-400 font-medium"
+                    : "gizmo-btn px-2.5 py-1 rounded text-xs text-gray-400 hover:bg-gray-800";
+            });
+        }
+        document.querySelectorAll('.gizmo-btn').forEach(btn => {
+            btn.addEventListener('click', () => setGizmoMode(btn.dataset.mode));
+        });
+
+        // Klik-Taruh Mode
+        const btnPlaceMode = document.getElementById('btn-place-mode');
+        const placeStatus = document.getElementById('place-status');
+        btnPlaceMode.addEventListener('click', () => {
+            gameState.placeMode = !gameState.placeMode;
+            placeStatus.textContent = gameState.placeMode ? 'ON' : 'OFF';
+            btnPlaceMode.classList.toggle('bg-emerald-900/40', gameState.placeMode);
+            btnPlaceMode.classList.toggle('border-emerald-500/50', gameState.placeMode);
+            if (gameState.placeMode) {
+                selectObject(null);
+                showToast("Mode Klik-Taruh ON: Klik di mana saja pada Terrain untuk menaruh aset.");
+            }
+        });
+
+        // Preset Spawn Buttons
+        document.querySelectorAll('.preset-spawn-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const preset = btn.dataset.preset;
+                gameState.activePreset = preset;
+                // Spawn di dekat karakter
+                const offsetX = (Math.random() - 0.5) * 6;
+                const offsetZ = (Math.random() - 0.5) * 6 - 4;
+                spawnAssetAt(preset, playerController.position.x + offsetX, playerController.position.z + offsetZ, true);
+            });
+        });
+
+        // Upload GLB Karakter
+        document.getElementById('upload-char-glb').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) loadCharacterFromGLB(file, file.name);
+        });
+
+        // Upload GLB Aset Tempat
+        function registerAssetGLB(file) {
+            const url = URL.createObjectURL(file);
+            gltfLoader.load(url, (gltf) => {
+                const model = gltf.scene;
+                model.traverse(c => {
+                    if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; }
+                });
+                const template = { name: file.name.replace(/\.(glb|gltf)$/i, ''), scene: model };
+                gameState.customAssetTemplates.push(template);
+
+                // Tambahkan tombol di Library
+                const lib = document.getElementById('asset-library');
+                const btn = document.createElement('button');
+                btn.className = "bg-blue-900/30 hover:bg-blue-800/40 border border-blue-500/40 rounded-lg p-2 flex flex-col items-center text-xs transition";
+                btn.innerHTML = `
+                    <i class="fa-solid fa-cube text-blue-400 text-base mb-1"></i>
+                    <span class="truncate w-full text-center text-[11px]">${template.name}</span>
+                `;
+                btn.addEventListener('click', () => {
+                    gameState.activePreset = template;
+                    spawnAssetAt(template, playerController.position.x + 3, playerController.position.z + 3, true);
+                });
+                lib.prepend(btn);
+
+                // Langsung spawn 1 ke scene
+                spawnAssetAt(template, playerController.position.x + 2, playerController.position.z - 2, true);
+                showToast(`Aset GLB "${template.name}" berhasil diimport!`);
+            });
+        }
+
+        document.getElementById('upload-asset-glb').addEventListener('change', (e) => {
+            Array.from(e.target.files).forEach(file => registerAssetGLB(file));
+        });
+
+        // Drag & Drop File GLB ke Layar
+        const dropOverlay = document.getElementById('drop-overlay');
+        window.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropOverlay.classList.remove('hidden');
+            dropOverlay.classList.add('flex');
+        });
+        window.addEventListener('dragleave', (e) => {
+            if (e.relatedTarget === null) {
+                dropOverlay.classList.add('hidden');
+                dropOverlay.classList.remove('flex');
+            }
+        });
+        window.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropOverlay.classList.add('hidden');
+            dropOverlay.classList.remove('flex');
+
+            const files = Array.from(e.dataTransfer.files).filter(f => /\.(glb|gltf)$/i.test(f.name));
+            if (files.length === 0) {
+                showToast("Harap masukkan file berformat .glb atau .gltf", true);
+                return;
+            }
+            // Jika nama file mengandung 'char', 'player', atau 'h4054' jadikan karakter, selain itu jadikan aset
+            files.forEach(file => {
+                if (/char|player|hero|man|bot|h4054/i.test(file.name) || files.length === 1) {
+                    loadCharacterFromGLB(file, file.name);
+                } else {
+                    registerAssetGLB(file);
+                }
+            });
+        });
+
+        // --- BINDING SLIDER PENGATURAN KARAKTER ---
+        function bindSlider(id, valId, propPath, suffix = '', callback = null) {
+            const el = document.getElementById(id);
+            const valEl = document.getElementById(valId);
+            el.addEventListener('input', (e) => {
+                const v = parseFloat(e.target.value);
+                valEl.textContent = v.toFixed(propPath.includes('freq') || propPath.includes('scale') || propPath.includes('Offset') ? 2 : 1) + suffix;
+                if (callback) callback(v);
+            });
+        }
+
+        bindSlider('cfg-walk-speed', 'val-walk-speed', 'walkSpeed', '', v => gameState.charConfig.walkSpeed = v);
+        bindSlider('cfg-run-speed', 'val-run-speed', 'runSpeed', '', v => gameState.charConfig.runSpeed = v);
+        bindSlider('cfg-jump-force', 'val-jump-force', 'jumpForce', '', v => gameState.charConfig.jumpForce = v);
+        bindSlider('cfg-gravity', 'val-gravity', 'gravity', '', v => gameState.charConfig.gravity = v);
+        bindSlider('cfg-turn-speed', 'val-turn-speed', 'turnSpeed', '', v => gameState.charConfig.turnSpeed = v);
+
+        bindSlider('cfg-char-scale', 'val-char-scale', 'scale', 'x', v => {
+            gameState.charConfig.scale = v;
+            applyCharacterCalibration();
+        });
+        bindSlider('cfg-char-yoffset', 'val-char-yoffset', 'yOffset', '', v => {
+            gameState.charConfig.yOffset = v;
+            applyCharacterCalibration();
+        });
+        bindSlider('cfg-char-roty', 'val-char-roty', 'rotY', '°', v => {
+            gameState.charConfig.rotYOffset = v;
+            applyCharacterCalibration();
+        });
+
+        bindSlider('cfg-cam-dist', 'val-cam-dist', 'camDist', '', v => gameState.charConfig.camDist = v);
+        bindSlider('cfg-cam-height', 'val-cam-height', 'camHeight', '', v => gameState.charConfig.camHeight = v);
+
+        document.getElementById('cfg-char-anim').addEventListener('change', (e) => {
+            if (e.target.value !== 'procedural') {
+                playGLBAnimation(parseInt(e.target.value));
+            } else if (characterMixer) {
+                characterMixer.stopAllAction();
+            }
+        });
+
+        document.getElementById('cfg-show-collider').addEventListener('change', (e) => {
+            colliderMat.visible = e.target.checked;
+        });
+
+        document.getElementById('btn-reset-char-pos').addEventListener('click', () => {
+            playerController.position.set(0, getTerrainHeightAt(0, 0) + 2, 0);
+            playerVelocity.set(0, 0, 0);
+            showToast("Posisi karakter di-reset ke tengah Terrain.");
+        });
+
+        // --- BINDING PENGATURAN TERRAIN ---
+        bindSlider('cfg-terr-height', 'val-terr-height', 'amp', '', v => {
+            gameState.terrainConfig.amplitude = v;
+            updateTerrainGeometry();
+        });
+        bindSlider('cfg-terr-freq', 'val-terr-freq', 'freq', '', v => {
+            gameState.terrainConfig.frequency = v;
+            updateTerrainGeometry();
+        });
+
+        document.getElementById('cfg-show-grid').addEventListener('change', e => gridHelper.visible = e.target.checked);
+        document.getElementById('cfg-terr-wireframe').addEventListener('change', e => terrainMat.wireframe = e.target.checked);
+
+        document.getElementById('btn-scatter-nature').addEventListener('click', () => {
+            scatterInitialEnvironment();
+            showToast("18 Aset Alam ditambahkan ke Terrain!");
+        });
+
+        bindSlider('cfg-sun-angle', 'val-sun-angle', 'sun', '°', v => {
+            const rad = THREE.MathUtils.degToRad(v);
+            sunLight.position.set(Math.cos(rad) * 50, Math.sin(rad) * 50, 25);
+        });
+
+        // --- BINDING INSPECTOR OBJEK ---
+        ['x', 'y', 'z'].forEach(axis => {
+            document.getElementById(`insp-pos-${axis}`).addEventListener('change', (e) => {
+                if (!gameState.selectedObject) return;
+                gameState.selectedObject.position[axis] = parseFloat(e.target.value) || 0;
+            });
+            document.getElementById(`insp-rot-${axis}`).addEventListener('change', (e) => {
+                if (!gameState.selectedObject) return;
+                gameState.selectedObject.rotation[axis] = THREE.MathUtils.degToRad(parseFloat(e.target.value) || 0);
+            });
+        });
+
+        document.getElementById('insp-scale-uni').addEventListener('input', (e) => {
+            if (!gameState.selectedObject) return;
+            const s = parseFloat(e.target.value);
+            gameState.selectedObject.scale.set(s, s, s);
+        });
+
+        document.getElementById('btn-snap-ground').addEventListener('click', () => {
+            if (!gameState.selectedObject) return;
+            const obj = gameState.selectedObject;
+            obj.position.y = getTerrainHeightAt(obj.position.x, obj.position.z);
+            updateInspectorUI(obj);
+        });
+
+        document.getElementById('btn-clone-obj').addEventListener('click', () => {
+            if (!gameState.selectedObject) return;
+            const orig = gameState.selectedObject;
+            const clone = orig.clone(true);
+            clone.position.x += 2;
+            clone.position.z += 2;
+            clone.position.y = getTerrainHeightAt(clone.position.x, clone.position.z);
+            clone.userData = { ...orig.userData, id: THREE.MathUtils.generateUUID().slice(0, 6) };
+            scene.add(clone);
+            gameState.placedObjects.push(clone);
+            selectObject(clone);
+            showToast("Objek diduplikat!");
+        });
+
+        function deleteSelectedObject() {
+            if (!gameState.selectedObject) return;
+            const obj = gameState.selectedObject;
+            transformControls.detach();
+            scene.remove(obj);
+            gameState.placedObjects = gameState.placedObjects.filter(o => o !== obj);
+            selectObject(null);
+            showToast("Objek dihapus dari scene.");
+        }
+        document.getElementById('btn-delete-selected').addEventListener('click', deleteSelectedObject);
+
+        // --- MODAL BLENDER SCRIPT & EXPORT SCENE ---
+        const modal = document.getElementById('blender-modal');
+        document.getElementById('btn-blender-script').addEventListener('click', () => {
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        });
+        document.getElementById('btn-close-modal').addEventListener('click', () => {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        });
+        document.getElementById('btn-copy-script').addEventListener('click', () => {
+            const code = document.getElementById('blender-code').textContent;
+            navigator.clipboard.writeText(code);
+            showToast("Script Python Blender disalin ke Clipboard!");
+        });
+
+        document.getElementById('btn-export-scene').addEventListener('click', () => {
+            const data = {
+                charConfig: gameState.charConfig,
+                terrainConfig: gameState.terrainConfig,
+                assets: gameState.placedObjects.map(o => ({
+                    name: o.name,
+                    position: o.position.toArray(),
+                    rotation: [o.rotation.x, o.rotation.y, o.rotation.z],
+                    scale: o.scale.toArray()
+                }))
+            };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'scene_level_data.json';
+            a.click();
+            showToast("Level JSON berhasil diunduh!");
+        });
+
+        // Toast Helper
+        let toastTimeout;
+        function showToast(msg, isError = false) {
+            const t = document.getElementById('toast-msg');
+            t.textContent = msg;
+            t.className = `absolute bottom-5 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-xs font-medium shadow-lg transition-all duration-300 z-40 ${
+                isError ? 'bg-red-950 border border-red-500 text-red-200' : 'bg-gray-900/95 border border-blue-500/60 text-white'
+            }`;
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                t.classList.add('opacity-0', 'translate-y-4');
+            }, 3200);
+        }
+
+        // --- GAME LOOP & FISIKA KARAKTER ---
+        const clock = new THREE.Clock();
+        let frameCount = 0;
+        let lastFpsTime = performance.now();
+
+        function updateCharacterPhysics(dt) {
+            const cfg = gameState.charConfig;
+            const speed = keys.shift ? cfg.runSpeed : cfg.walkSpeed;
+
+            // Arah pergerakan relatif terhadap kamera
+            const camForward = new THREE.Vector3();
+            camera.getWorldDirection(camForward);
+            camForward.y = 0;
+            camForward.normalize();
+
+            const camRight = new THREE.Vector3().crossVectors(camForward, new THREE.Vector3(0, 1, 0)).normalize();
+
+            const moveDir = new THREE.Vector3();
+            if (keys.w) moveDir.add(camForward);
+            if (keys.s) moveDir.sub(camForward);
+            if (keys.d) moveDir.add(camRight);
+            if (keys.a) moveDir.sub(camRight);
+
+            const isMoving = moveDir.lengthSq() > 0.001;
+
+            if (isMoving) {
+                moveDir.normalize();
+                playerController.position.x += moveDir.x * speed * dt;
+                playerController.position.z += moveDir.z * speed * dt;
+
+                // Rotasi karakter menghadap arah jalan
+                const targetAngle = Math.atan2(moveDir.x, moveDir.z);
+                const currentQuat = playerController.quaternion.clone();
+                const targetQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), targetAngle);
+                playerController.quaternion.slerp(targetQuat, Math.min(1, cfg.turnSpeed * dt));
+            }
+
+            // Batas Terrain
+            const halfLimit = terrainSize / 2 - 2;
+            playerController.position.x = THREE.MathUtils.clamp(playerController.position.x, -halfLimit, halfLimit);
+            playerController.position.z = THREE.MathUtils.clamp(playerController.position.z, -halfLimit, halfLimit);
+
+            // Gravitasi & Lompat
+            const groundY = getTerrainHeightAt(playerController.position.x, playerController.position.z);
+
+            if (keys.space && isGrounded) {
+                playerVelocity.y = cfg.jumpForce;
+                isGrounded = false;
+            }
+
+            playerVelocity.y -= cfg.gravity * dt;
+            playerController.position.y += playerVelocity.y * dt;
+
+            if (playerController.position.y <= groundY) {
+                playerController.position.y = groundY;
+                playerVelocity.y = 0;
+                isGrounded = true;
+            }
+
+            // Animasi Procedural Kaki/Tangan atau Bounce
+            if (characterMixer) {
+                characterMixer.update(dt);
+            } else {
+                if (isMoving && isGrounded) {
+                    walkCycleTime += dt * (keys.shift ? 14 : 9);
+                    if (!isCustomGLBChar && defaultLimbs.leftLeg) {
+                        defaultLimbs.leftLeg.rotation.x = Math.sin(walkCycleTime) * 0.65;
+                        defaultLimbs.rightLeg.rotation.x = -Math.sin(walkCycleTime) * 0.65;
+                        defaultLimbs.leftArm.rotation.x = -Math.sin(walkCycleTime) * 0.5;
+                        defaultLimbs.rightArm.rotation.x = Math.sin(walkCycleTime) * 0.5;
+                    } else {
+                        // Bounce halus untuk GLB statis tanpa tulang
+                        characterVisualRoot.position.y = cfg.yOffset + Math.abs(Math.sin(walkCycleTime)) * 0.15;
+                    }
+                } else {
+                    if (!isCustomGLBChar && defaultLimbs.leftLeg) {
+                        defaultLimbs.leftLeg.rotation.x = THREE.MathUtils.lerp(defaultLimbs.leftLeg.rotation.x, 0, 10 * dt);
+                        defaultLimbs.rightLeg.rotation.x = THREE.MathUtils.lerp(defaultLimbs.rightLeg.rotation.x, 0, 10 * dt);
+                        defaultLimbs.leftArm.rotation.x = THREE.MathUtils.lerp(defaultLimbs.leftArm.rotation.x, 0, 10 * dt);
+                        defaultLimbs.rightArm.rotation.x = THREE.MathUtils.lerp(defaultLimbs.rightArm.rotation.x, 0, 10 * dt);
+                    }
+                }
+            }
+
+            // Kamera Follow di Mode Main (Play Mode)
+            if (gameState.mode === 'play') {
+                const targetPos = playerController.position.clone().add(new THREE.Vector3(0, cfg.camHeight * 0.6, 0));
+                orbitControls.target.lerp(targetPos, 8 * dt);
+
+                // Jaga jarak kamera sesuai slider
+                const dirFromTarget = camera.position.clone().sub(orbitControls.target).normalize();
+                const desiredCamPos = orbitControls.target.clone().add(dirFromTarget.multiplyScalar(cfg.camDist));
+                desiredCamPos.y = Math.max(groundY + 1.5, orbitControls.target.y + cfg.camHeight * 0.5);
+                camera.position.lerp(desiredCamPos, 6 * dt);
+            }
+
+            // Update HUD Posisi
+            document.getElementById('hud-pos').textContent = 
+                `Pos: ${playerController.position.x.toFixed(1)}, ${playerController.position.y.toFixed(1)}, ${playerController.position.z.toFixed(1)}`;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const dt = Math.min(clock.getDelta(), 0.1);
+            updateCharacterPhysics(dt);
+            orbitControls.update();
+            renderer.render(scene, camera);
+
+            // Hitung FPS
+            frameCount++;
+            const now = performance.now();
+            if (now - lastFpsTime >= 1000) {
+                document.getElementById('hud-fps').textContent = `${frameCount} FPS`;
+                frameCount = 0;
+                lastFpsTime = now;
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = viewport.clientWidth / viewport.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+        });
+
+        window.onload = () => {
+            playerController.position.y = getTerrainHeightAt(0, 0);
+            animate();
+        };
+    </script>
+</body>
+</html>
